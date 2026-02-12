@@ -19,7 +19,9 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+data
+data/brats20-dataset-training-validation.zip
+data/kaggle.json
 # Virtual Environment
 venv/
 env/

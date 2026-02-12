@@ -36,8 +36,6 @@ ENV/
 *~
 
 # Model files (large)
-*.pt
-*.pth
 *.pkl
 *.h5
 *.ckpt

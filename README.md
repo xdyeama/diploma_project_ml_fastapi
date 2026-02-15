@@ -107,6 +107,34 @@ Once the server is running, visit:
 #### Download Results
 - `GET /download-segmentation/{filename}` - Download segmentation result file
 
+### Viewing segmentation results
+
+Results are saved under `uploaded_models/` (e.g. `segmentation_20260215_122803.nii.gz` or `.png`).
+
+**Option 1 — Download via API**
+
+```bash
+# Use the filename returned in the inference response (output_path)
+curl -O -J "http://localhost:8000/download-segmentation/segmentation_20260215_122803.nii.gz"
+```
+
+**Option 2 — View locally with the script**
+
+List recent results and open a file (NIfTI slice viewer or PNG in default viewer):
+
+```bash
+# List segmentation files in uploaded_models
+python scripts/view_segmentation.py
+
+# View a NIfTI volume (slice slider)
+python scripts/view_segmentation.py segmentation_20260215_122803.nii.gz
+
+# View a PNG result
+python scripts/view_segmentation.py segmentation_20260215_122803.png
+```
+
+Requires: `nibabel`, `matplotlib` (in `requirements.txt`).
+
 ### Example Usage
 
 #### Upload Model:

@@ -2,17 +2,29 @@
 Singleton service for U-Net model loading and management.
 """
 
+import sys
 import torch
 import torch.nn as nn
 from pathlib import Path
 from typing import Optional
 import logging
 from threading import Lock
-
-from models.unet import UNet
 from config import MODEL_WEIGHTS_DIR, DEVICE, MODEL_IN_CHANNELS, MODEL_OUT_CHANNELS
+from models import unet as unet_module
+from models import unet_legacy
 
 logger = logging.getLogger(__name__)
+
+
+def _register_unet_for_unpickle() -> None:
+    """Register legacy UNet/DoubleConv/center_crop so notebook checkpoints can unpickle."""
+    for mod_name in ("__main__", "__mp_main__"):
+        if mod_name not in sys.modules:
+            continue
+        mod = sys.modules[mod_name]
+        for name in ("DoubleConv", "UNet", "center_crop"):
+            if hasattr(unet_legacy, name):
+                setattr(mod, name, getattr(unet_legacy, name))
 
 
 class ModelService:
@@ -59,17 +71,23 @@ class ModelService:
             logger.info(f"Loading model from {model_path}")
             
             # Initialize model architecture
-            unet_model = UNet(
+            unet_model = unet_module.UNet(
                 in_channels=MODEL_IN_CHANNELS,
                 out_channels=MODEL_OUT_CHANNELS
             )
             unet_model.to(DEVICE)
             
-            # Load weights
-            checkpoint = torch.load(model_path, map_location=DEVICE)
+            # Full-model checkpoints were pickled with UNet from __main__; under uvicorn
+            # the main module is __mp_main__, which has no UNet. Register ours so unpickle works.
+            _register_unet_for_unpickle()
+            # PyTorch 2.6+ defaults to weights_only=True; full-model checkpoints need weights_only=False.
+            checkpoint = torch.load(model_path, map_location=DEVICE, weights_only=False)
             
-            # Handle different checkpoint formats
-            if isinstance(checkpoint, dict):
+            # Handle different checkpoint formats (full model vs state_dict)
+            if isinstance(checkpoint, nn.Module):
+                unet_model = checkpoint
+                unet_model.to(DEVICE)
+            elif isinstance(checkpoint, dict):
                 if 'model_state_dict' in checkpoint:
                     unet_model.load_state_dict(checkpoint['model_state_dict'])
                 elif 'state_dict' in checkpoint:
@@ -103,8 +121,10 @@ class ModelService:
         try:
             # Try to load from model_weights directory
             model_files = list(MODEL_WEIGHTS_DIR.glob("*.pt")) + list(MODEL_WEIGHTS_DIR.glob("*.pth"))
+            print(f"Model files: {model_files}")
             if model_files:
                 model_path = model_files[0]
+                print(f"Loading model from {model_path}")
                 return self.load_model(str(model_path))
             else:
                 logger.warning("No model weights found. Please upload a model.")

@@ -22,3 +22,5 @@ nibabel>=5.3.2
 pydantic>=2.12.5
 aiofiles>=25.1.0
 scipy>=1.15.0,<1.17.0  # SciPy 1.17.0+ requires Python 3.11+, using 1.15.x for Python 3.10+ compatibility
+
+matplotlib>=3.10.0

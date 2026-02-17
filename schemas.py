@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 
+
 class HealthResponse(BaseModel):
     """Health check response."""
     status: str
@@ -30,3 +31,5 @@ class InferenceResponse(BaseModel):
     classes_detected: List[int]
     output_format: str
     output_path: Optional[str] = None
+    nifti_path: Optional[str] = None
+    image_base64: Optional[str] = None 

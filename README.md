@@ -100,9 +100,18 @@ Once the server is running, visit:
 
 #### Inference
 - `POST /inference/image` - Inference on grayscale image
-- `POST /inference/nifti` - Inference on NIfTI file
-- `POST /inference/nifti/flair` - Inference on FLAIR NIfTI file
-- `POST /inference/nifti/t1ce` - Inference on T1CE NIfTI file
+- `POST /inference/nifti` - Inference on NIfTI file; returns a 3D NIfTI mask (`nifti_path`) and a PNG visualization (`output_path`)
+- `POST /inference/nifti/flair` - Inference on FLAIR NIfTI file (same response structure as `/inference/nifti`)
+- `POST /inference/nifti/t1ce` - Inference on T1CE NIfTI file (same response structure as `/inference/nifti`)
+
+> **InferenceResponse fields**
+> - `status`: `"success"` or error status
+> - `message`: human-readable description
+> - `shape`: output tensor/volume shape
+> - `classes_detected`: list of class IDs present in the segmentation
+> - `output_format`: `"image"` for PNG visualizations, `"nifti"` for raw volumes (image endpoint uses `"image"`)
+> - `output_path`: filename of the main visualization image (PNG) stored in `uploaded_models/`
+> - `nifti_path`: filename of the full 3D NIfTI segmentation volume (for NIfTI endpoints)
 
 #### Download Results
 - `GET /download-segmentation/{filename}` - Download segmentation result file

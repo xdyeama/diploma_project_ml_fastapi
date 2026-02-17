@@ -125,22 +125,22 @@ if __name__ == "__main__":
     check_health()
     
     # Example: Upload model (uncomment and provide path)
-    # model_path = "model_weights/Entire Model.pt"
-    # if os.path.exists(model_path):
-    #     upload_model(model_path)
+    model_path = "model_weights/Entire Model.pt"
+    if os.path.exists(model_path):
+        upload_model(model_path)
     
     # Example: Inference on image (uncomment and provide path)
-    # image_path = "path/to/your/image.png"
-    # if os.path.exists(image_path):
-    #     inference_image(image_path)
+    image_path = "path/to/your/image.png"
+    if os.path.exists(image_path):
+        inference_image(image_path)
     
     # Example: Inference on NIfTI (uncomment and provide path)
-    # nifti_path = "path/to/your/volume.nii.gz"
-    # if os.path.exists(nifti_path):
-    #     inference_nifti(nifti_path, endpoint="nifti")
-    #     # Or use specialized endpoints:
-    #     # inference_nifti(nifti_path, endpoint="nifti/flair")
-    #     # inference_nifti(nifti_path, endpoint="nifti/t1ce")
+    nifti_path = "path/to/your/volume.nii.gz"
+    if os.path.exists(nifti_path):
+        inference_nifti(nifti_path, endpoint="nifti")
+        # Or use specialized endpoints:
+        # inference_nifti(nifti_path, endpoint="nifti/flair")
+        # inference_nifti(nifti_path, endpoint="nifti/t1ce")
     
     print("\n" + "=" * 60)
     print("Example completed. Uncomment sections above to test with your files.")

@@ -9,8 +9,8 @@ python-multipart>=0.0.22
 
 # Image processing & numerical
 pillow>=12.1.0
-numpy>=1.26.4,<2.0.0  # NumPy 2.x requires Python 3.11+, using 1.x for Python 3.10+ compatibility
-opencv-python>=4.13
+numpy>=2.0.0
+opencv-python>=4.13.0.90
 matplotlib>=3.10.0
 
 # Deep learning
@@ -25,7 +25,7 @@ dicom2nifti>=2.5.0
 # Utilities
 pydantic>=2.12.5
 aiofiles>=25.1.0
-scipy>=1.15.0,<1.17.0  # SciPy 1.17.0+ requires Python 3.11+, using 1.15.x for Python 3.10+ compatibility
+scipy>=1.15.0  # Compatible with NumPy >=2.0 in this container image
 
 # Standard library-only usage (no PyPI package needed):
 # - shutil (part of Python stdlib)

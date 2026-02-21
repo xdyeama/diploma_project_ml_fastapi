@@ -110,25 +110,32 @@ class ModelService:
         except Exception as e:
             logger.error(f"Error loading model: {e}")
             raise
-    
+
     def load_default_model(self) -> Optional[nn.Module]:
-        """
-        Load default model from model_weights directory.
-        
-        Returns:
-            Loaded model if found, None otherwise
-        """
         try:
-            # Try to load from model_weights directory
             model_files = list(MODEL_WEIGHTS_DIR.glob("*.pt")) + list(MODEL_WEIGHTS_DIR.glob("*.pth"))
             print(f"Model files: {model_files}")
-            if model_files:
-                model_path = model_files[0]
-                print(f"Loading model from {model_path}")
-                return self.load_model(str(model_path))
-            else:
+
+            if not model_files:
                 logger.warning("No model weights found. Please upload a model.")
                 return None
+
+            # Приоритет: сначала entire_model (полная модель), потом weights
+            preferred = ["unet_entire_model.pt", "unet_entire_model.pth",
+                         "unet_weights.pt", "unet_weights.pth"]
+
+            model_path = None
+            for name in preferred:
+                candidate = MODEL_WEIGHTS_DIR / name
+                if candidate.exists():
+                    model_path = candidate
+                    break
+
+            if model_path is None:
+                model_path = model_files[0]
+
+            print(f"Loading model from {model_path}")
+            return self.load_model(str(model_path))
         except Exception as e:
             logger.error(f"Error loading default model: {e}")
             return None

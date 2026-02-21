@@ -53,14 +53,15 @@ def _preprocess_for_classification(image: Image.Image, target_size: tuple = (512
     Returns:
         Preprocessed tensor [1, 1, H, W]
     """
-    transform = transforms.Compose([
+
+    transform_classification = transforms.Compose([
         transforms.Grayscale(num_output_channels=1),
         transforms.Resize(target_size),
         transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,))  # Normalize to [-1, 1]
-    ])
+        transforms.Normalize((0.5,), (0.5,))
+])
     
-    tensor = transform(image)
+    tensor = transform_classification(image)
     return tensor.unsqueeze(0)  # Add batch dimension
 
 
@@ -90,11 +91,12 @@ async def classify_image(
         
         # Read and preprocess image
         image_bytes = await file.read()
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        image = Image.open(io.BytesIO(image_bytes)).convert("L") 
         
         input_tensor = _preprocess_for_classification(image)
         input_tensor = input_tensor.to(DEVICE)
         
+        model.eval()
         # Inference
         with torch.no_grad():
             logits = model(input_tensor)
@@ -150,10 +152,11 @@ async def classify_batch(
             try:
                 # Read and preprocess
                 image_bytes = await file.read()
-                image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                image = Image.open(io.BytesIO(image_bytes)).convert("L") 
                 input_tensor = _preprocess_for_classification(image)
                 input_tensor = input_tensor.to(DEVICE)
                 
+                model.eval()
                 # Inference
                 with torch.no_grad():
                     logits = model(input_tensor)

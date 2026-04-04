@@ -51,6 +51,7 @@ async def inference_image(file: UploadFile = File(...)):
         input_tensor = input_tensor.to(DEVICE)
         input_tensor = _adapt_input_channels(input_tensor, model)
         
+        model.eval()
         # Inference
         with torch.no_grad():
             output = model(input_tensor)
@@ -127,6 +128,7 @@ async def inference_nifti(file: UploadFile = File(...)):
             )
             input_tensor = _adapt_input_channels(input_tensor, model)
 
+            model.eval()
             with torch.no_grad():
                 output = model(input_tensor)
                 seg_slice = torch.argmax(output, dim=1).cpu().numpy()[0]
@@ -270,6 +272,7 @@ async def inference_dicom(files: list[UploadFile] = File(...)):
             )
             input_tensor = _adapt_input_channels(input_tensor, model)
 
+            model.eval()
             with torch.no_grad():
                 output    = model(input_tensor)
                 seg_slice = torch.argmax(output, dim=1).cpu().numpy()[0]

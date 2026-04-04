@@ -32,4 +32,15 @@ class InferenceResponse(BaseModel):
     output_format: str
     output_path: Optional[str] = None
     nifti_path: Optional[str] = None
-    image_base64: Optional[str] = None 
+    image_base64: Optional[str] = None
+
+
+class ClassificationResponse(BaseModel):
+    """Classification response for SMG-Net."""
+    status: str
+    message: str
+    predicted_class: int
+    predicted_class_name: Optional[str] = None
+    class_probabilities: List[float]
+    class_names: Optional[List[str]] = None
+    confidence: float 

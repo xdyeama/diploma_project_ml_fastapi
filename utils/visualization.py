@@ -67,3 +67,53 @@ def build_overlay_grid(
     if not success:
         raise RuntimeError("cv2.imencode failed to produce PNG bytes")
     return buf.tobytes()
+
+
+def build_overlay_slices(
+    flair_volume: np.ndarray,       # (H, W, D)  raw FLAIR voxels
+    seg_volume: np.ndarray,         # (H, W, D)  uint8 class labels
+    img_size: int = 256,
+    alpha: float = 0.5,
+    max_slices: int = 155,
+) -> list[bytes]:
+    """
+    Build individual overlay PNG images for each axial slice.
+
+    Each image shows the FLAIR slice with the segmentation mask overlaid
+    using the same colour scheme as build_overlay_grid.
+
+    Returns a list of PNG byte strings, one per slice.
+    """
+    depth = seg_volume.shape[2]
+    indices = np.linspace(0, depth - 1, min(max_slices, depth), dtype=int)
+
+    slices_png: list[bytes] = []
+
+    for idx in indices:
+        # ── FLAIR background ──────────────────────────────────────────────
+        flair_slice = flair_volume[:, :, idx]
+        flair_resized = cv2.resize(flair_slice, (img_size, img_size)).astype(np.float32)
+        flair_norm = flair_resized / (flair_resized.max() + 1e-8)
+        flair_gray = (flair_norm * 255).astype(np.uint8)
+        flair_rgb = cv2.cvtColor(flair_gray, cv2.COLOR_GRAY2RGB)
+
+        # ── Segmentation overlay ──────────────────────────────────────────
+        seg_slice = seg_volume[:, :, idx].astype(np.uint8)
+        seg_resized = cv2.resize(seg_slice, (img_size, img_size),
+                                 interpolation=cv2.INTER_NEAREST)
+        seg_clipped = np.clip(seg_resized, 0, len(SEG_COLORS) - 1)
+        seg_rgb = SEG_COLORS[seg_clipped]
+
+        tumor_mask = (seg_clipped > 0)[:, :, np.newaxis]
+        cell = np.where(
+            tumor_mask,
+            ((1 - alpha) * flair_rgb + alpha * seg_rgb).astype(np.uint8),
+            flair_rgb,
+        )
+
+        success, buf = cv2.imencode(".png", cv2.cvtColor(cell, cv2.COLOR_RGB2BGR))
+        if not success:
+            raise RuntimeError(f"cv2.imencode failed for slice {idx}")
+        slices_png.append(buf.tobytes())
+
+    return slices_png

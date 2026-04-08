@@ -1,14 +1,21 @@
-# Brain Tumor Segmentation API
+# Brain Tumor Segmentation & Classification API
 
-FastAPI-based service for U-Net CNN brain tumor segmentation model. This service provides endpoints for model uploading and inference on various MRI image formats.
+FastAPI-based service for brain tumor segmentation (U-Net) and neurological disorder classification (SMG-Net). This service provides endpoints for model uploading and inference on various MRI image formats.
 
 ## Features
 
+### Segmentation (U-Net)
 - **Model Upload**: Upload and load PyTorch model weights (.pt, .pth files)
 - **Grayscale Image Inference**: Process single grayscale images (PNG, JPEG, TIFF)
 - **NIfTI File Inference**: Process 3D NIfTI volumes (.nii, .nii.gz)
 - **FLAIR NIfTI Inference**: Specialized endpoint for FLAIR MRI sequences
 - **T1CE NIfTI Inference**: Specialized endpoint for T1-weighted contrast-enhanced MRI sequences
+
+### Classification (SMG-Net)
+- **SMG-Net Model Upload**: Upload and load SMG-Net classification model weights
+- **Single Image Classification**: Classify a single MRI image into neurological disorder categories
+- **Batch Classification**: Classify multiple MRI images in a single request
+- **Default Classes**: Alzheimer's, MS, Normal, Tumor (customizable per request)
 
 ## Installation
 
@@ -96,9 +103,10 @@ Once the server is running, visit:
 - `GET /health` - Health check endpoint
 
 #### Model Management
-- `POST /upload-model` - Upload a new model weights file
+- `POST /upload-model` - Upload a new segmentation model weights file
+- `POST /upload-model/smgnet` - Upload a new SMG-Net classification model weights file (query params: `num_classes`, `in_channels`)
 
-#### Inference
+#### Segmentation Inference
 - `POST /inference/image` - Inference on grayscale image
 - `POST /inference/nifti` - Inference on NIfTI file; returns a 3D NIfTI mask (`nifti_path`) and a PNG visualization (`output_path`)
 - `POST /inference/nifti/flair` - Inference on FLAIR NIfTI file (same response structure as `/inference/nifti`)
@@ -112,6 +120,19 @@ Once the server is running, visit:
 > - `output_format`: `"image"` for PNG visualizations, `"nifti"` for raw volumes (image endpoint uses `"image"`)
 > - `output_path`: filename of the main visualization image (PNG) stored in `uploaded_models/`
 > - `nifti_path`: filename of the full 3D NIfTI segmentation volume (for NIfTI endpoints)
+
+#### Classification (SMG-Net)
+- `POST /classification/classify_image` - Classify a single MRI image
+- `POST /classification/classify_batch` - Classify multiple MRI images in batch
+
+> **ClassificationResponse fields**
+> - `status`: `"success"` or `"error"`
+> - `message`: human-readable description
+> - `predicted_class`: integer class index
+> - `predicted_class_name`: human-readable class label (e.g. `"Alzheimer's"`)
+> - `class_probabilities`: list of probabilities for each class
+> - `class_names`: list of all class labels
+> - `confidence`: probability of the predicted class
 
 #### Download Results
 - `GET /download-segmentation/{filename}` - Download segmentation result file
@@ -170,12 +191,45 @@ curl -X POST "http://localhost:8000/inference/nifti" \
   -F "file=@path/to/volume.nii.gz"
 ```
 
-## Model Architecture
+#### Upload SMG-Net Model:
+```bash
+curl -X POST "http://localhost:8000/upload-model/smgnet?num_classes=4&in_channels=1" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@model_weights/smgnet_best.pth"
+```
 
-The service uses a U-Net architecture with:
-- Input: 1 channel (grayscale)
+#### Classify Single Image:
+```bash
+curl -X POST "http://localhost:8000/classification/classify_image" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@path/to/mri_image.png" \
+  -F "class_names=Alzheimer's, MS, Normal, Tumor"
+```
+
+#### Classify Batch of Images:
+```bash
+curl -X POST "http://localhost:8000/classification/classify_batch" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "files=@path/to/image1.png" \
+  -F "files=@path/to/image2.png" \
+  -F "class_names=Alzheimer's, MS, Normal, Tumor"
+```
+
+## Model Architectures
+
+### U-Net (Segmentation)
+- Input: 1 channel (grayscale), 256x256 pixels
 - Output: 4 classes (background, edema, non-enhancing tumor, enhancing tumor)
-- Input size: 256x256 pixels
+- Default weights: `model_weights/Entire Model.pt`
+
+### SMG-Net (Classification)
+- Input: 1 channel (grayscale), 512x512 pixels
+- Output: 4 classes (Alzheimer's, MS, Normal, Tumor) — customizable via `class_names` parameter
+- Architecture: CNN backbone (conv layers with BN + ReLU + MaxPool) → global average pooling → dropout (0.5) → FC
+- Default weights: `model_weights/smgnet_best.pth`
 
 ## Project Structure
 
@@ -188,14 +242,17 @@ fastapi_ai_model_service/
 ├── api/                   # API endpoints (modular routers)
 │   ├── __init__.py
 │   ├── health.py         # Health check endpoints
-│   ├── model.py          # Model upload endpoints
-│   └── inference.py      # Inference endpoints
+│   ├── model.py          # Model upload endpoints (segmentation + SMG-Net)
+│   ├── inference.py      # Segmentation inference endpoints
+│   └── classification.py # SMG-Net classification endpoints
 ├── core/                  # Core services
 │   ├── __init__.py
-│   └── model_service.py  # Singleton model service
+│   ├── model_service.py  # Singleton segmentation model service
+│   └── smgnet_service.py # Singleton SMG-Net classification service
 ├── models/                # Model architectures
 │   ├── __init__.py
-│   └── unet.py           # U-Net model architecture
+│   ├── unet.py           # U-Net model architecture
+│   └── smgnet.py         # SMG-Net classification architecture
 ├── utils/                 # Utility functions
 │   ├── __init__.py
 │   ├── preprocessing.py  # Image preprocessing utilities
@@ -210,16 +267,19 @@ The application follows a modular architecture:
 
 - **`main.py`**: Minimal entry point that initializes FastAPI app and includes routers
 - **`config.py`**: Centralized configuration (paths, device settings, model parameters)
-- **`core/model_service.py`**: Singleton pattern for model loading and management
+- **`core/model_service.py`**: Singleton pattern for segmentation model loading and management
+- **`core/smgnet_service.py`**: Singleton pattern for SMG-Net classification model loading and management
 - **`api/`**: Separated endpoint routers for better organization
   - `health.py`: Health check endpoints
-  - `model.py`: Model upload and management
-  - `inference.py`: All inference endpoints
+  - `model.py`: Model upload and management (both segmentation and classification)
+  - `inference.py`: Segmentation inference endpoints
+  - `classification.py`: SMG-Net classification endpoints
 
 ## Notes
 
-- The model automatically loads from `model_weights/` directory on startup
+- Both models automatically load from `model_weights/` directory on startup (U-Net segmentation + SMG-Net classification)
 - GPU support is automatic if CUDA is available
 - Segmentation results are temporarily stored in `uploaded_models/` directory
-- Input images are automatically resized to 256x256 for inference
+- Segmentation input images are automatically resized to 256x256; classification inputs are resized to 512x512
 - NIfTI volumes are processed slice-by-slice
+- Classification `class_names` parameter is optional — defaults to `"Alzheimer's, MS, Normal, Tumor"`

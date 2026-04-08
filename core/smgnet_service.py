@@ -87,16 +87,18 @@ class SMGNetService:
                 smgnet_model.to(DEVICE)
             elif isinstance(checkpoint, dict):
                 if 'model_state_dict' in checkpoint:
-                    smgnet_model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                    smgnet_model.load_state_dict(checkpoint['model_state_dict'], strict=True)
+                elif 'model_state' in checkpoint:
+                    smgnet_model.load_state_dict(checkpoint['model_state'], strict=True)
                 elif 'state_dict' in checkpoint:
-                    smgnet_model.load_state_dict(checkpoint['state_dict'], strict=False)
+                    smgnet_model.load_state_dict(checkpoint['state_dict'], strict=True)
                 elif 'model' in checkpoint:
-                    smgnet_model.load_state_dict(checkpoint['model'], strict=False)
+                    smgnet_model.load_state_dict(checkpoint['model'], strict=True)
                 else:
                     # Try loading as state_dict directly
-                    smgnet_model.load_state_dict(checkpoint, strict=False)
+                    smgnet_model.load_state_dict(checkpoint, strict=True)
             else:
-                smgnet_model.load_state_dict(checkpoint, strict=False)
+                smgnet_model.load_state_dict(checkpoint, strict=True)
             
             smgnet_model.eval()
             

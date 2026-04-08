@@ -43,4 +43,15 @@ class ClassificationResponse(BaseModel):
     predicted_class_name: Optional[str] = None
     class_probabilities: List[float]
     class_names: Optional[List[str]] = None
-    confidence: float 
+    confidence: float
+
+
+class SlicesInferenceResponse(BaseModel):
+    """Response containing individual overlay slices for frontend slider."""
+    status: str
+    message: str
+    shape: List[int]
+    classes_detected: List[int]
+    total_slices: int
+    nifti_path: Optional[str] = None
+    slices: List[str]

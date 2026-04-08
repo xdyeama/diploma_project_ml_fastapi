@@ -16,11 +16,11 @@ import logging
 import base64
 import shutil
 import math
-from schemas import InferenceResponse
+from schemas import InferenceResponse, SlicesInferenceResponse
 from core.model_service import ModelService
 from utils.preprocessing import preprocess_image, preprocess_nifti
 from utils.postprocessing import postprocess_segmentation
-from utils.visualization import build_overlay_grid
+from utils.visualization import build_overlay_grid, build_overlay_slices
 from utils.dicom_handler import _build_overlay_grid, _load_dicom_volume, _crop_black_borders
 from utils.helpers import _get_model, _adapt_input_channels
 from config import UPLOADED_MODELS_DIR, DEVICE
@@ -181,6 +181,96 @@ async def inference_nifti(file: UploadFile = File(...)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"NIfTI inference failed: {str(e)}",
+        )
+
+
+@router.post("/nifti/slices", response_model=SlicesInferenceResponse)
+async def inference_nifti_slices(file: UploadFile = File(...)):
+    """
+    Perform inference on a NIfTI file and return individual overlay slices.
+
+    Each axial slice is returned as a separate base64-encoded PNG image,
+    suitable for a frontend slider component.
+    """
+    model = _get_model()
+
+    try:
+        # ── 1. Write upload to a temp file so nibabel can load it ─────────
+        nifti_bytes = await file.read()
+        suffix = Path(file.filename).suffix if file.filename else ".nii"
+        if suffix == ".gz" and file.filename and file.filename.endswith(".nii.gz"):
+            suffix = ".nii.gz"
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(nifti_bytes)
+            tmp_path = tmp.name
+
+        try:
+            nifti_img = nib.load(tmp_path)
+            volume_data = nifti_img.get_fdata()
+        finally:
+            os.unlink(tmp_path)
+
+        # ── 2. Preprocess & run slice-by-slice inference ──────────────────
+        processed_volume = preprocess_nifti(volume_data)
+
+        segmentation_volume = []
+        for i in range(processed_volume.shape[2]):
+            slice_data = processed_volume[:, :, i]
+            input_tensor = (
+                torch.from_numpy(slice_data)
+                .unsqueeze(0).unsqueeze(0).float().to(DEVICE)
+            )
+            input_tensor = _adapt_input_channels(input_tensor, model)
+
+            model.eval()
+            with torch.no_grad():
+                output = model(input_tensor)
+                seg_slice = torch.argmax(output, dim=1).cpu().numpy()[0]
+
+            segmentation_volume.append(seg_slice)
+
+        segmentation_volume = np.stack(segmentation_volume, axis=2)
+        seg_volume_uint8 = segmentation_volume.astype(np.uint8)
+
+        # ── 3. Save full 3-D segmentation as NIfTI ────────────────────────
+        seg_nifti = nib.Nifti1Image(
+            seg_volume_uint8,
+            nifti_img.affine,
+            nifti_img.header,
+        )
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nifti_filename = f"segmentation_{timestamp}.nii.gz"
+        nib.save(seg_nifti, UPLOADED_MODELS_DIR / nifti_filename)
+
+        # ── 4. Build individual overlay slices ─────────────────────────────
+        slices_png = build_overlay_slices(
+            flair_volume=volume_data,
+            seg_volume=seg_volume_uint8,
+            img_size=256,
+            alpha=0.5,
+            max_slices=155,
+        )
+
+        slices_base64 = [
+            base64.b64encode(s).decode("utf-8") for s in slices_png
+        ]
+
+        return SlicesInferenceResponse(
+            status="success",
+            message="NIfTI slice inference completed successfully",
+            shape=list(segmentation_volume.shape),
+            classes_detected=list(map(int, np.unique(segmentation_volume))),
+            total_slices=len(slices_base64),
+            nifti_path=nifti_filename,
+            slices=slices_base64,
+        )
+
+    except Exception as e:
+        logger.error(f"Error during NIfTI slice inference: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"NIfTI slice inference failed: {str(e)}",
         )
 
 

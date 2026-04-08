@@ -44,7 +44,6 @@ jobs:
             docker rm medical-ml-app || true
             docker run -d \
               --name medical-ml-app \
-              --gpus all \
               -p 8000:8000 \
               --restart unless-stopped \
               $DOCKERHUB_USERNAME/medical-ml:latest

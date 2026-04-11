@@ -61,20 +61,31 @@ async def inference_image(file: UploadFile = File(...)):
         processed_segmentation = postprocess_segmentation(segmentation)
         
         # Convert to image and save
-        seg_image = Image.fromarray(
-            (processed_segmentation * 255 / processed_segmentation.max()).astype(np.uint8)
-        )
+        max_val = processed_segmentation.max()
+        if max_val > 0:
+            seg_image = Image.fromarray(
+                (processed_segmentation * 255 / max_val).astype(np.uint8)
+            )
+        else:
+            seg_image = Image.fromarray(processed_segmentation.astype(np.uint8))
+
         output_filename = f"segmentation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         output_path = UPLOADED_MODELS_DIR / output_filename
         seg_image.save(output_path, format="PNG")
         
+        # Encode image as base64
+        buf = io.BytesIO()
+        seg_image.save(buf, format="PNG")
+        image_base64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+
         return InferenceResponse(
             status="success",
             message="Inference completed successfully",
             shape=list(segmentation.shape),
             classes_detected=list(np.unique(segmentation)),
             output_format="image",
-            output_path=output_filename
+            output_path=output_filename,
+            image_base64=image_base64
         )
     
     except Exception as e:

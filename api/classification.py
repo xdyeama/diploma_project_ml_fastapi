@@ -5,9 +5,12 @@ Classification endpoints for SMG-Net model.
 from fastapi import APIRouter, File, UploadFile, HTTPException, status
 from pathlib import Path
 from datetime import datetime
+import tempfile
+import os
 import torch
 import numpy as np
 from PIL import Image
+import nibabel as nib
 import io
 import logging
 import torchvision.transforms as transforms
@@ -194,4 +197,100 @@ async def classify_batch(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Batch classification failed: {str(e)}"
+        )
+
+
+@router.post("/classify_nifti", response_model=ClassificationResponse)
+async def classify_nifti(
+    file: UploadFile = File(...),
+    slice_index: int = None,
+    class_names: str = "Alzheimer's, MS, Normal, Tumor"
+):
+    """
+    Classify a NIfTI MRI volume using SMG-Net.
+
+    Accepts .nii or .nii.gz files. Extracts the middle axial slice
+    (or a user-specified slice), converts it to a grayscale image,
+    and classifies it.
+
+    Args:
+        file: NIfTI file to classify
+        slice_index: Optional axial slice index to use. Defaults to the middle slice.
+        class_names: Optional comma-separated class names
+    """
+    model, service = _get_smgnet_model()
+
+    try:
+        # Parse class names
+        if class_names:
+            names = [name.strip() for name in class_names.split(",")]
+        else:
+            names = DEFAULT_CLASS_NAMES[:service.get_num_classes()]
+
+        # Write upload to a temp file so nibabel can load it
+        nifti_bytes = await file.read()
+        suffix = Path(file.filename).suffix if file.filename else ".nii"
+        if suffix == ".gz" and file.filename and file.filename.endswith(".nii.gz"):
+            suffix = ".nii.gz"
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(nifti_bytes)
+            tmp_path = tmp.name
+
+        try:
+            nifti_img = nib.load(tmp_path)
+            volume_data = nifti_img.get_fdata()
+        finally:
+            os.unlink(tmp_path)
+
+        # Select axial slice
+        num_slices = volume_data.shape[2]
+        if slice_index is None:
+            slice_index = num_slices // 2
+        elif slice_index < 0 or slice_index >= num_slices:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"slice_index must be between 0 and {num_slices - 1}"
+            )
+
+        slice_data = volume_data[:, :, slice_index].astype(np.float32)
+
+        # Normalize to 0-255 and convert to PIL Image
+        min_val, max_val = slice_data.min(), slice_data.max()
+        if max_val > min_val:
+            slice_data = (slice_data - min_val) / (max_val - min_val) * 255.0
+        else:
+            slice_data = np.zeros_like(slice_data)
+        image = Image.fromarray(slice_data.astype(np.uint8), mode="L")
+
+        # Preprocess and classify
+        input_tensor = _preprocess_for_classification(image)
+        input_tensor = input_tensor.to(DEVICE)
+
+        model.eval()
+        with torch.no_grad():
+            logits = model(input_tensor)
+            probabilities = torch.softmax(logits, dim=1)
+            predicted_class = torch.argmax(probabilities, dim=1).item()
+            confidence = probabilities[0][predicted_class].item()
+
+        prob_list = probabilities[0].cpu().numpy().tolist()
+
+        return ClassificationResponse(
+            status="success",
+            message=f"NIfTI classification completed (slice {slice_index}/{num_slices})",
+            predicted_class=int(predicted_class),
+            predicted_class_name=names[predicted_class] if predicted_class < len(names) else f"Class {predicted_class}",
+            class_probabilities=prob_list,
+            class_names=names,
+            confidence=float(confidence)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error during NIfTI classification: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"NIfTI classification failed: {str(e)}"
         )

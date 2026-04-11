@@ -4,7 +4,7 @@
 # NVIDIA Container Toolkit installed on the server.
 #
 
-FROM --platform=linux/arm64 pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+FROM --platform=linux/amd64 pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
